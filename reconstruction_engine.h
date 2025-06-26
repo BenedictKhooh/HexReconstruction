@@ -131,77 +131,77 @@ namespace ReconstructionEngine {
     /**
      * @brief Step 3: Build hexahedral cells from the list of valid faces using a robust face-pairing strategy.
      */
-    inline std::vector<Hexahedron> buildHexahedra(const std::vector<QuadFace>& validFaces, const AdjacencyGraph& adjGraph) {
-        std::vector<Hexahedron> candidateHexahedra;
+     inline std::vector<Hexahedron> buildHexahedra(const std::vector<QuadFace>& validFaces, const AdjacencyGraph& adjGraph) {
+            std::vector<Hexahedron> candidateHexahedra;
 
-        // Iterate through all possible pairs of faces to find opposite pairs.
-        for (size_t i = 0; i < validFaces.size(); ++i) {
-            for (size_t j = i + 1; j < validFaces.size(); ++j) {
-                const auto& face1 = validFaces[i];
-                const auto& face2 = validFaces[j];
+            // Iterate through all possible pairs of faces to find opposite pairs.
+            for (size_t i = 0; i < validFaces.size(); ++i) {
+                for (size_t j = i + 1; j < validFaces.size(); ++j) {
+                    const auto& face1 = validFaces[i];
+                    const auto& face2 = validFaces[j];
 
-                // --- Check 1: Faces must be disjoint (no shared vertices).
-                QSet<int> face1_pts;
-                for(int p : face1) face1_pts.insert(p);
-                bool disjoint = true;
-                for(int p : face2) {
-                    if (face1_pts.contains(p)) {
-                        disjoint = false;
-                        break;
+                    // --- Check 1: Faces must be disjoint (no shared vertices).
+                    QSet<int> face1_pts;
+                    for(int p : face1) face1_pts.insert(p);
+                    bool disjoint = true;
+                    for(int p : face2) {
+                        if (face1_pts.contains(p)) {
+                            disjoint = false;
+                            break;
+                        }
                     }
-                }
-                if (!disjoint) continue;
+                    if (!disjoint) continue;
 
-                // --- Check 2: There must be exactly 4 connecting edges between them.
-                std::vector<std::pair<int, int>> connecting_edges;
-                for (int p1 : face1) {
-                    if (!adjGraph.count(p1)) continue;
-                    for (int p2 : face2) {
-                        if (adjGraph.at(p1).count(p2)) {
-                            connecting_edges.push_back({p1, p2});
+                    // --- Check 2: There must be exactly 4 connecting edges between them.
+                    std::vector<std::pair<int, int>> connecting_edges;
+                    for (int p1 : face1) {
+                        if (!adjGraph.count(p1)) continue;
+                        for (int p2 : face2) {
+                            if (adjGraph.at(p1).count(p2)) {
+                                connecting_edges.push_back({p1, p2});
+                            }
+                        }
+                    }
+
+                    if (connecting_edges.size() == 4) {
+                        // --- Check 3: Verify that each vertex is used exactly once in the connections.
+                        QSet<int> f1_check, f2_check;
+                        for(const auto& edge : connecting_edges) {
+                            f1_check.insert(edge.first);
+                            f2_check.insert(edge.second);
+                        }
+
+                        if (f1_check.size() == 4 && f2_check.size() == 4) {
+                            // We found a valid hexahedron candidate.
+                            Hexahedron hex;
+                            for(int k=0; k<4; ++k) hex[k] = connecting_edges[k].first;
+                            for(int k=0; k<4; ++k) hex[k+4] = connecting_edges[k].second;
+                            candidateHexahedra.push_back(hex);
                         }
                     }
                 }
+            }
 
-                if (connecting_edges.size() == 4) {
-                    // --- Check 3: Verify that each vertex is used exactly once in the connections.
-                    QSet<int> f1_check, f2_check;
-                    for(const auto& edge : connecting_edges) {
-                        f1_check.insert(edge.first);
-                        f2_check.insert(edge.second);
-                    }
+            // Deduplicate the results.
+            std::vector<Hexahedron> finalHexahedra;
+            QSet<QVector<int>> uniqueHexes;
+            for (const auto& hex : candidateHexahedra) {
+                QVector<int> sortedHex(8);
+                for(int k=0; k<8; ++k) sortedHex[k] = hex[k];
+                std::sort(sortedHex.begin(), sortedHex.end());
 
-                    if (f1_check.size() == 4 && f2_check.size() == 4) {
-                        // We found a valid hexahedron candidate.
-                        Hexahedron hex;
-                        for(int k=0; k<4; ++k) hex[k] = connecting_edges[k].first;
-                        for(int k=0; k<4; ++k) hex[k+4] = connecting_edges[k].second;
-                        candidateHexahedra.push_back(hex);
-                    }
+                QSet<int> pointSet;
+                for(int p_idx : sortedHex) pointSet.insert(p_idx);
+                if(pointSet.size() != 8) continue;
+
+                if (!uniqueHexes.contains(sortedHex)) {
+                    finalHexahedra.push_back(hex);
+                    uniqueHexes.insert(sortedHex);
                 }
             }
+
+            return finalHexahedra;
         }
-
-        // Deduplicate the results.
-        std::vector<Hexahedron> finalHexahedra;
-        QSet<QVector<int>> uniqueHexes;
-        for (const auto& hex : candidateHexahedra) {
-            QVector<int> sortedHex(8);
-            for(int k=0; k<8; ++k) sortedHex[k] = hex[k];
-            std::sort(sortedHex.begin(), sortedHex.end());
-
-            QSet<int> pointSet;
-            for(int p_idx : sortedHex) pointSet.insert(p_idx);
-            if(pointSet.size() != 8) continue;
-
-            if (!uniqueHexes.contains(sortedHex)) {
-                finalHexahedra.push_back(hex);
-                uniqueHexes.insert(sortedHex);
-            }
-        }
-
-        return finalHexahedra;
-    }
 } // namespace ReconstructionEngine
 
 #endif // RECONSTRUCTION_ENGINE_H
